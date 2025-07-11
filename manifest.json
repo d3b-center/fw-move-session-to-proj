@@ -1,0 +1,53 @@
+{
+  "name": "fw-move-session-to-proj",
+  "label": "Move a session to a different project",
+  "description": "Finds sessions with a specific tag(s) and moves them to a specified project.",
+  "author": "D3b-TIRU",
+  "maintainer": "D3b-TIRU <flywheel@d3b.center>",
+  "url": "https://github.com/d3b-center/fw-move-session-to-proj", 
+  "source": "https://github.com/d3b-center/fw-move-session-to-proj", 
+  "version": "0.0.1",
+  "license": "Apache-2.0",
+  "custom": {
+    "flywheel": {
+      "suite": "Curation"
+    },
+    "gear-builder": {
+      "category": "utility",
+      "image": "flywheel-imaging.research.chop.edu/fw-move-session-to-proj:0.0.1"
+    }
+  },
+  "inputs": {
+    "api-key": {
+      "base": "api-key",
+      "read-only": true
+    }
+  },
+  "config": {
+    "destination_project": {
+      "default": "D3b_Ambra_raw_external_data",
+      "description": "Destination project to route the session to.",
+      "type": "string"
+    },
+    "matching_session_tags": {
+      "default": ["ambra_imported"],
+      "description": "Session tags to match. If multiple tags are provided, the session must match all of them.",
+      "type": "array"
+    },
+    "debug": {
+      "default": false,
+      "description": "Log debug messages",
+      "type": "boolean"
+    }
+  },
+  "environment": {
+    "PATH": "/opt/poetry/bin:/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    "PYTHON_VERSION": "3.9.7",
+    "PIP_NO_CACHE_DIR": "0",
+    "POETRY_HOME": "/opt/poetry",
+    "POETRY_VERSION": "1.1.11",
+    "POETRY_VIRTUALENVS_CREATE": "false",
+    "FLYWHEEL": "/flywheel/v0"
+  },
+  "command": "python run.py"
+}
