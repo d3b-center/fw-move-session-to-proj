@@ -56,7 +56,7 @@ def run(client: CoreClient, gtk_context: GearToolkitContext):
             # if couldn't update using project ID then see if 
             # it's a duplicate session (already exists in destination)
             # if not a duplicate, then move it using the destination subject ID instead
-            dest_sub = project.subjects.find_first(f'label={session.subject.label}')
+            dest_sub = fw.lookup(f'{project.parents.group}/{project.label}/{session.subject.label}')
             dest_sub = dest_sub.reload()
             ses_list=[]
             for dest_ses in dest_sub.sessions.iter():
