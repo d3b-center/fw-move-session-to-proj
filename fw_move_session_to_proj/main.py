@@ -83,4 +83,13 @@ def run(client: CoreClient, gtk_context: GearToolkitContext):
         except:
             log.warning(f'Session {session.label} does not have a StudyInstanceUID in ambra_metadata/study_uid. Skipping.')
         # update the source project info
-        source_project.update({'info': {'received_study_uids':existing_uid_list}})
+        try:
+            source_project.update({'info': {'received_study_uids':existing_uid_list}})
+        except WriteConflict as e:
+            try:
+                source_project.update({'info': {'received_study_uids':existing_uid_list}})
+            except WriteConflict as e:
+                try:
+                    source_project.update({'info': {'received_study_uids':existing_uid_list}})
+                except WriteConflict as e:
+                    log.error(f'Could not add StudyInstanceUID to project.info due to WriteConflict error')
