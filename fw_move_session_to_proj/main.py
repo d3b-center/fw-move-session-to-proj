@@ -50,23 +50,6 @@ def run(client: CoreClient, gtk_context: GearToolkitContext):
         project = project.reload()
         project_id = project.id
 
-        try:
-            session.update({'project': project_id})
-        except:
-            # if couldn't update using project ID then see if 
-            # it's a duplicate session (already exists in destination)
-            # if not a duplicate, then move it using the destination subject ID instead
-            dest_sub = fw.lookup(f'{project.parents.group}/{project.label}/{session.subject.label}')
-            dest_sub = dest_sub.reload()
-            ses_list=[]
-            for dest_ses in dest_sub.sessions.iter():
-                ses_list.append(dest_ses.label)
-            if session.label not in ses_list:
-                session.update({'subject':dest_sub.id})
-            else:
-                log.warning(f'Session {session.label} already exists in project {destination_project} under subject {dest_sub.label}. Skipping.')
-                return
-
     # if Ambra study, add to list of received StudyInstanceUIDs
     if project.label == 'D3b_Ambra_raw_external_data':
         log.info(f'Logging StudyInstanceUID in source project.')
@@ -85,11 +68,28 @@ def run(client: CoreClient, gtk_context: GearToolkitContext):
         # update the source project info
         try:
             source_project.update({'info': {'received_study_uids':existing_uid_list}})
-        except WriteConflict as e:
+        except:
             try:
                 source_project.update({'info': {'received_study_uids':existing_uid_list}})
-            except WriteConflict as e:
+            except:
                 try:
                     source_project.update({'info': {'received_study_uids':existing_uid_list}})
-                except WriteConflict as e:
+                except:
                     log.error(f'Could not add StudyInstanceUID to project.info due to WriteConflict error')
+
+        try:
+            session.update({'project': project_id})
+        except:
+            # if couldn't update using project ID then see if 
+            # it's a duplicate session (already exists in destination)
+            # if not a duplicate, then move it using the destination subject ID instead
+            dest_sub = fw.lookup(f'{project.parents.group}/{project.label}/{session.subject.label}')
+            dest_sub = dest_sub.reload()
+            ses_list=[]
+            for dest_ses in dest_sub.sessions.iter():
+                ses_list.append(dest_ses.label)
+            if session.label not in ses_list:
+                session.update({'subject':dest_sub.id})
+            else:
+                log.warning(f'Session {session.label} already exists in project {destination_project} under subject {dest_sub.label}. Skipping.')
+                return
