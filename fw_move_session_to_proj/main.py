@@ -89,7 +89,42 @@ def run(client: CoreClient, gtk_context: GearToolkitContext):
             for dest_ses in dest_sub.sessions.iter():
                 ses_list.append(dest_ses.label)
             if session.label not in ses_list:
+                # if the session is not already in the destination subject, move it
                 session.update({'subject':dest_sub.id})
             else:
-                log.warning(f'Session {session.label} already exists in project {destination_project} under subject {dest_sub.label}. Skipping.')
-                return
+                log.warning(f'Session {session.label} already exists in project {destination_project} under subject {dest_sub.label}. Checking acquisitions.')
+                dest_ses = fw.lookup(f'{project.parents.group}/{project.label}/{session.subject.label}/{session.label}')
+                # initialize list of acquisitions and files in the destination
+                acq_list=[]
+                file_list = []
+                for acq in dest_ses.acquisitions.iter():
+                    for file in acq.files:
+                        acq_list.append(acq.label)
+                        file_list.append([acq.label, file.name])
+                # if the whole acquisition isn't in the destination, move it
+                for acq in session.acquisitions.iter():
+                    if acq.label not in acq_list:
+                        acq.update({'session':dest_ses.id})
+                # if there is a matching acquisition, check if there is a duplicate file
+                    else:
+                        dest_acq = fw.lookup(f'{project.parents.group}/{project.label}/{session.subject.label}/{session.label}/{acq.label}')
+                        for file in acq.files:
+                            if [acq.label, file.name] not in file_list:
+                                print(f'Moving file {acq.label}/{file.name} to destination project')
+                                log.info(f'Moving file {acq.label}/{file.name} to destination project')
+                                file.update({'acquisition':dest_acq.id})
+                            else:
+                                print(f'Deleting duplicate file {acq.label}/{file.name}')
+                                log.info(f'Deleting duplicate file {acq.label}/{file.name}')
+                                fw.delete_acquisition_file(acq.id, file.name)
+                        # delete empty acquisitions
+                        acq=acq.reload()
+                        if acq.files == []:
+                            fw.delete_acquisition(acq.id)
+            # delete empty session
+            session=session.reload()
+            acq_count=0
+            for acq in session.acquisitions.iter():
+                acq_count+=1
+            if acq_count == 0:
+                fw.delete_session(session.id)
