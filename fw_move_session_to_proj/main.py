@@ -110,13 +110,13 @@ def run(client: CoreClient, gtk_context: GearToolkitContext):
                         dest_acq = fw.lookup(f'{project.parents.group}/{project.label}/{session.subject.label}/{session.label}/{acq.label}')
                         for file in acq.files:
                             if [acq.label, file.name] not in file_list:
-                                print(f'Moving file {acq.label}/{file.name} to destination project')
                                 log.info(f'Moving file {acq.label}/{file.name} to destination project')
-                                file.update({'acquisition':dest_acq.id})
+                                move = 1
                             else:
-                                print(f'Deleting duplicate file {acq.label}/{file.name}')
                                 log.info(f'Deleting duplicate file {acq.label}/{file.name}')
                                 fw.delete_acquisition_file(acq.id, file.name)
+                        if move == 1:
+                            acq.update({'session':dest_ses.id})
                         # delete empty acquisitions
                         acq=acq.reload()
                         if acq.files == []:
