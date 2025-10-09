@@ -10,15 +10,15 @@ _Category:_ Utility
 
 _Gear Level:_
 
-- [ ] Project
+- [x] Project
 - [ ] Subject
-- [x] Session
+- [ ] Session
 - [ ] Acquisition
 - [ ] Analysis
 
 ## Usage
 
-Runs at the session-level
+Runs at the project-level, iterates through all sessions.
 
 ### Inputs
 

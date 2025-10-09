@@ -6,15 +6,15 @@
   "maintainer": "D3b-TIRU <flywheel@d3b.center>",
   "url": "https://github.com/d3b-center/fw-move-session-to-proj", 
   "source": "https://github.com/d3b-center/fw-move-session-to-proj", 
-  "version": "0.0.6",
+  "version": "0.1.1",
   "license": "Apache-2.0",
   "custom": {
     "flywheel": {
       "suite": "Curation"
     },
     "gear-builder": {
-      "category": "utility",
-      "image": "flywheel-imaging.research.chop.edu/fw-move-session-to-proj:0.0.6"
+      "category": "analysis",
+      "image": "flywheel-imaging.research.chop.edu/fw-move-session-to-proj:0.1.1"
     }
   },
   "inputs": {

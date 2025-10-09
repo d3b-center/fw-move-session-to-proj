@@ -32,7 +32,7 @@ def get_analysis_run_level_and_hierarchy(gtk_context_client, destination_id):
         "acquisition_label":None
     }
 
-    run_level = 'session'
+    run_level = 'project'
     destination = gtk_context_client.get(destination_id)
     analysis_id = fw_context.destination['id']
 
@@ -41,7 +41,7 @@ def get_analysis_run_level_and_hierarchy(gtk_context_client, destination_id):
 
         hierarchy["group"] = destination.parents["group"]
 
-        for level in ["project", "subject", "session"]:
+        for level in ["project"]:
             if level == run_level:
                 analysis_container = fw.get(analysis_id)
                 # print(analysis_container)
