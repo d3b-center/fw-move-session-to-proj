@@ -22,8 +22,10 @@ def run(client: CoreClient, gtk_context: GearToolkitContext):
         gtk_context (GearToolkitContext)
     """
     # get the Flywheel hierarchy for the run
-    destination_id = gtk_context.destination["id"]
-    project = fw.get(destination_id)
+    destination_id = gtk_context.destination["id"] # utility gear
+    destination = fw.get(destination_id)
+    project_id = destination.parents["project"] # analysis gear
+    project = fw.get(project_id)
 
     # get the input file
     CONFIG_FILE_PATH = '/flywheel/v0/config.json'
@@ -35,7 +37,7 @@ def run(client: CoreClient, gtk_context: GearToolkitContext):
 
     # ============== Update project.info for Ambra studies ==========
     # first, update the list of existing StudyInstanceUIDs if this is the Ambra project
-    if project.label == 'D3b_Ambra_raw_external_data':
+    if project.label == 'd3b_landing_zone':
         log.info(f'Logging StudyInstanceUID for all sessions in source project to project.info.received_study_uids')
         # get existing list of study UIDs
         project = project.reload()
@@ -68,6 +70,7 @@ def run(client: CoreClient, gtk_context: GearToolkitContext):
 
     # ============== Move sessions ==================================
     project = project.reload()
+    existing_uid_list = project.info.get('received_study_uids')
     n_sessions = project.stats.number_of.sessions
     count = 0
     # iterate through sessions in the current project
@@ -82,61 +85,66 @@ def run(client: CoreClient, gtk_context: GearToolkitContext):
             log.info(f'{count}/{n_sessions} Session {session.label} does not match tags {matching_session_tags}. Skipping.')
             return
         else:
-            log.info(f'{count}/{n_sessions} Session {session.label} matches tags {matching_session_tags}. Moving to project {destination_project}.')
-            # get the project
-            dest_project = fw.projects.find_first(f'label={destination_project}')
-            dest_project = dest_project.reload()
-            dest_project_id = dest_project.id
+            this_session_uid =  session.info['ambra_metadata']['study_uid']
+            if (project.label == 'd3b_landing_zone') & (this_session_uid not in existing_uid_list):
+                # avoid moving sessions that haven't been logged in the source project info for d3b_landing_zone
+                log.info(f'{count}/{n_sessions} Session {session.label} not logged in project.info.received_study_uids. Skipping.')
+            else:
+                log.info(f'{count}/{n_sessions} Session {session.label} matches tags {matching_session_tags}. Moving to project {destination_project}.')
+                # get the project
+                dest_project = fw.projects.find_first(f'label={destination_project}')
+                dest_project = dest_project.reload()
+                dest_project_id = dest_project.id
 
-            try:
-                session.update({'project': dest_project_id})
-            except:
-                # if couldn't update using project ID then see if 
-                # it's a duplicate session (already exists in destination)
-                # if not a duplicate, then move it using the destination subject ID instead
-                dest_sub = fw.lookup(f'{project.parents.group}/{project.label}/{session.subject.label}')
-                dest_sub = dest_sub.reload()
-                ses_list=[]
-                for dest_ses in dest_sub.sessions.iter():
-                    ses_list.append(dest_ses.label)
-                if session.label not in ses_list:
-                    # if the session is not already in the destination subject, move it
-                    session.update({'subject':dest_sub.id})
-                else:
-                    log.warning(f'{count}/{n_sessions} Session {session.label} already exists in project {destination_project} under subject {dest_sub.label}. Checking acquisitions.')
-                    dest_ses = fw.lookup(f'{dest_project.parents.group}/{dest_project.label}/{session.subject.label}/{session.label}')
-                    # initialize list of acquisitions and files in the destination
-                    acq_list=[]
-                    file_list = []
-                    for acq in dest_ses.acquisitions.iter():
-                        for file in acq.files:
-                            acq_list.append(acq.label)
-                            file_list.append([acq.label, file.name])
-                    # if the whole acquisition isn't in the destination, move it
-                    for acq in session.acquisitions.iter():
-                        if acq.label not in acq_list:
-                            acq.update({'session':dest_ses.id})
-                    # if there is a matching acquisition, check if there is a duplicate file
-                        else:
-                            dest_acq = fw.lookup(f'{dest_project.parents.group}/{dest_project.label}/{session.subject.label}/{session.label}/{acq.label}')
-                            move = 0
+                try:
+                    session.update({'project': dest_project_id})
+                except:
+                    # if couldn't update using project ID then see if 
+                    # it's a duplicate session (already exists in destination)
+                    # if not a duplicate, then move it using the destination subject ID instead
+                    dest_sub = fw.lookup(f'{dest_project.parents.group}/{dest_project.label}/{session.subject.label}')
+                    dest_sub = dest_sub.reload()
+                    dest_ses_list=[]
+                    for dest_ses in dest_sub.sessions.iter():
+                        dest_ses_list.append(dest_ses.label)
+                    if session.label not in dest_ses_list:
+                        # if the session is not already in the destination subject, move it
+                        session.update({'subject':dest_sub.id})
+                    else:
+                        log.warning(f'{count}/{n_sessions} Session {session.label} already exists in project {destination_project} under subject {dest_sub.label}. Checking acquisitions.')
+                        dest_ses = fw.lookup(f'{dest_project.parents.group}/{dest_project.label}/{session.subject.label}/{session.label}')
+                        # initialize list of acquisitions and files in the destination
+                        acq_list=[]
+                        file_list = []
+                        for acq in dest_ses.acquisitions.iter():
                             for file in acq.files:
-                                if [acq.label, file.name] not in file_list:
-                                    log.info(f'{count}/{n_sessions} Moving file {acq.label}/{file.name} to destination project')
-                                    move = 1
-                                else:
-                                    log.info(f'{count}/{n_sessions} Deleting duplicate file {acq.label}/{file.name}')
-                                    fw.delete_acquisition_file(acq.id, file.name)   
-                            if move == 1:
+                                acq_list.append(acq.label)
+                                file_list.append([acq.label, file.name])
+                        # if the whole acquisition isn't in the destination, move it
+                        for acq in session.acquisitions.iter():
+                            if acq.label not in acq_list:
                                 acq.update({'session':dest_ses.id})
-                            # delete empty acquisitions
-                            acq=acq.reload()
-                            if acq.files == []:
-                                fw.delete_acquisition(acq.id)
-                # delete empty session
-                # session=session.reload()
-                # acq_count=0
-                # for acq in session.acquisitions.iter():
-                #     acq_count+=1
-                # if acq_count == 0:
-                #     fw.delete_session(session.id)
+                        # if there is a matching acquisition, check if there is a duplicate file
+                            else:
+                                dest_acq = fw.lookup(f'{dest_project.parents.group}/{dest_project.label}/{session.subject.label}/{session.label}/{acq.label}')
+                                move = 0
+                                for file in acq.files:
+                                    if [acq.label, file.name] not in file_list:
+                                        log.info(f'{count}/{n_sessions} Moving file {acq.label}/{file.name} to destination project')
+                                        move = 1
+                                    else:
+                                        log.info(f'{count}/{n_sessions} Deleting duplicate file {acq.label}/{file.name}')
+                                        fw.delete_acquisition_file(acq.id, file.name)   
+                                if move == 1:
+                                    acq.update({'session':dest_ses.id})
+                                # delete empty acquisitions
+                                acq=acq.reload()
+                                if acq.files == []:
+                                    fw.delete_acquisition(acq.id)
+                    # delete empty session
+                    session=session.reload()
+                    acq_count=0
+                    for acq in session.acquisitions.iter():
+                        acq_count+=1
+                    if acq_count == 0:
+                        fw.delete_session(session.id)
