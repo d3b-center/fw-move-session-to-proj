@@ -34,59 +34,80 @@ def run(client: CoreClient, gtk_context: GearToolkitContext):
 
     destination_project = config['config']['destination_project']
     matching_session_tags = config['config']['matching_session_tags']
-
+    
+    # ============== Safety guard ===================================
+    # Refuse to run if the source and destination are the same project.
+    # The duplicate-reconciliation branch below would compare every session
+    # against itself, delete all its files as "duplicates", then delete the
+    # emptied acquisitions and the session.
+    if project.label == destination_project:
+        log.error(
+            f'Source project "{project.label}" is also the configured destination. Refusing to run.'
+        )
+        return 1
     # ============== Update project.info for Ambra studies ==========
     # first, update the list of existing StudyInstanceUIDs if this is the Ambra project
     if project.label == 'd3b_landing_zone':
         log.info(f'Logging StudyInstanceUID for all sessions in source project to project.info.received_study_uids')
         # get existing list of study UIDs
         project = project.reload()
-        existing_uid_list = project.info.get('received_study_uids')
+        existing_uid_list = project.info.get('received_study_uids') or [] #allow a none list if this is a new project or list was deleted
+        added = 0
         for session in project.sessions.iter():
             session = session.reload()
             if not all(tag in session.tags for tag in matching_session_tags):
                 log.info(f'  Session {session.label} does not match tags {matching_session_tags}. Skipping.')
+                continue
             # get the StudyInstanceUID from the ambra_metadata
+            this_session_uid = ((session.info or {}).get('ambra_metadata') or {}).get('study_uid')
+            if this_session_uid is None:
+                log.warning(f'  Session {session.label} does not have a StudyInstanceUID in ambra_metadata/study_uid. Skipping.')
+                continue
+            if this_session_uid in existing_uid_list:
+                log.debug(f'  StudyInstanceUID {this_session_uid} already in project info.')
+                continue
+            existing_uid_list.append(this_session_uid)
+            added += 1
+        # write project.info ONCE, and only if something actually changed
+        if added:
+            log.info(f'Adding {added} new StudyInstanceUID(s) to project.info.received_study_uids')
+            for attempt in range(3):
+                try:
+                    project.update({'info': {'received_study_uids': existing_uid_list}})
+                    break
+                except Exception as exc:
+                    log.warning(f'  project.update attempt {attempt+1}/3 failed: {exc}')
             else:
-                try:
-                    this_session_uid =  session.info['ambra_metadata']['study_uid']
-                    if this_session_uid not in existing_uid_list:
-                            existing_uid_list.append(this_session_uid)
-                    else:
-                        log.warning(f'  StudyInstanceUID {this_session_uid} already exists in source project info. Skipping.')
-                except:
-                    log.warning(f'  Session {session.label} does not have a StudyInstanceUID in ambra_metadata/study_uid. Skipping.')
-                # update the source project info
-                try:
-                    project.update({'info': {'received_study_uids':existing_uid_list}})
-                except:
-                    try:
-                        project.update({'info': {'received_study_uids':existing_uid_list}})
-                    except:
-                        try:
-                            project.update({'info': {'received_study_uids':existing_uid_list}})
-                        except:
-                            log.error(f'  Could not add StudyInstanceUID to project.info due to WriteConflict error')
+                log.error('  Could not update project.info after 3 attempts')
+                return 1
+        else:
+            log.info('No new StudyInstanceUIDs to add.')
 
     # ============== Move sessions ==================================
     project = project.reload()
     existing_uid_list = project.info.get('received_study_uids')
-    n_sessions = project.stats.number_of.sessions
+    #materialize list of sessions before moving anything 
+    #otherwise pagination while removing sessions at same time can skip sessions
+    sessions = list(project.sessions.iter())
+    n_sessions = len(sessions)
     count = 0
     # iterate through sessions in the current project
-    for session in project.sessions.iter():
+    for session in sessions:
         session = session.reload()
         count += 1
         if not session.tags:
             log.warning(f'{count}/{n_sessions} Session {session.label} has no tags. Skipping.')
-            return
+            continue
         # check if session matches the tags
         if not all(tag in session.tags for tag in matching_session_tags):
             log.info(f'{count}/{n_sessions} Session {session.label} does not match tags {matching_session_tags}. Skipping.')
-            return
+            continue
         else:
-            this_session_uid =  session.info['ambra_metadata']['study_uid']
-            if (project.label == 'd3b_landing_zone') & (this_session_uid not in existing_uid_list):
+            this_session_uid = ((session.info or {}).get('ambra_metadata') or {}).get('study_uid')
+            if this_session_uid is None:
+               log.warning(f'{count}/{n_sessions} Session {session.label} has no ambra_metadata/study_uid. Skipping.')
+               continue
+            if (project.label == 'd3b_landing_zone') and (this_session_uid not in existing_uid_list):
                 # avoid moving sessions that haven't been logged in the source project info for d3b_landing_zone
                 log.info(f'{count}/{n_sessions} Session {session.label} not logged in project.info.received_study_uids. Skipping.')
             else:
@@ -148,3 +169,4 @@ def run(client: CoreClient, gtk_context: GearToolkitContext):
                         acq_count+=1
                     if acq_count == 0:
                         fw.delete_session(session.id)
+    return 0
